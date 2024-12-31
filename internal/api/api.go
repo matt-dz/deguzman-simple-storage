@@ -7,6 +7,8 @@ import (
 	"errors"
 	"github.com/jackc/pgx/v5"
 	"net/http"
+	"os"
+	"path/filepath"
 )
 
 var logging = logger.GetLogger()
@@ -44,6 +46,12 @@ func HandleGetFile(w http.ResponseWriter, r *http.Request) {
 
 	/* Serving file */
 	logging.Info("Serving file")
-	http.ServeFile(w, r, filePath)
+	mountPath := os.Getenv("MOUNT_PATH")
+	if mountPath == "" {
+		logging.Error("Mount path not set")
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	http.ServeFile(w, r, filepath.Join(mountPath, filePath))
 	logging.Info("Successfully served file")
 }
