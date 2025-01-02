@@ -21,6 +21,7 @@ var db = database.GetDb()
 var ctx = context.Background()
 
 const uploadLimit = 10 << 23 // 10 GB
+const FileNameHeader = "X-File-Name"
 
 var mountPath = os.Getenv("MOUNT_PATH")
 
@@ -67,7 +68,7 @@ func HandleGetFile(w http.ResponseWriter, r *http.Request) {
 func HandleUploadFile(w http.ResponseWriter, r *http.Request) {
 	logging.Info("Uploading file")
 
-	if r.Header.Get("X-File-Name") == "" {
+	if r.Header.Get(FileNameHeader) == "" {
 		logging.Error("File name not set")
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
@@ -80,7 +81,7 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
-	path := filepath.Join(mountPath, r.Header.Get("X-File-Name"))
+	path := filepath.Join(mountPath, r.Header.Get(FileNameHeader))
 
 	/* Add file to DB */
 	logging.Info("Adding file to DB")
@@ -90,7 +91,7 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request) {
 	INSERT INTO files (file_path) VALUES ($1)
 	RETURNING key
 	`
-	if err := db.QueryRow(ctx, query, path).Scan(&key); err != nil {
+	if err := db.QueryRow(ctx, query, r.Header.Get(FileNameHeader)).Scan(&key); err != nil {
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 			logging.Error("File already exists")
 			http.Error(w, http.StatusText(http.StatusConflict), http.StatusConflict)
