@@ -16,6 +16,11 @@ func main() {
 		middleware.Authenticate(),
 	))
 
+	mux.HandleFunc("POST /upload", middleware.Chain(
+		api.HandleUploadFile,
+		middleware.Authenticate(),
+	))
+
 	logging.Info("Starting server on :80")
 	server := &http.Server{
 		Addr:    ":80",
