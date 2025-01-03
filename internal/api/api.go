@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"io"
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -56,6 +57,9 @@ func HandleGetFile(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+
+	/* Set Headers */
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filepath.Base(filePath)))
 
 	/* Serving file */
 	logging.Info("Serving file")
