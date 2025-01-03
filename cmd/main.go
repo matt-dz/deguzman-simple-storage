@@ -16,6 +16,11 @@ func main() {
 		middleware.Authenticate(),
 	))
 
+	mux.HandleFunc("GET /list", middleware.Chain(
+		api.HandleListFiles,
+		middleware.Authenticate(),
+	))
+
 	mux.HandleFunc("POST /upload", middleware.Chain(
 		api.HandleUploadFile,
 		middleware.Authenticate(),
