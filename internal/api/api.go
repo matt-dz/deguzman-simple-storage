@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bufio"
 	"context"
 	"dss/internal/database"
 	"dss/internal/logger"
@@ -12,7 +11,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"io"
-	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -25,7 +23,6 @@ var db = database.GetDb()
 var ctx = context.Background()
 
 const uploadLimit = 10 << 23 // 10 GB
-const FileNameHeader = "X-File-Name"
 
 var mountPath = os.Getenv("MOUNT_PATH")
 
@@ -75,30 +72,46 @@ func HandleGetFile(w http.ResponseWriter, r *http.Request) {
 func HandleUploadFile(w http.ResponseWriter, r *http.Request) {
 	logging.Info("Uploading file")
 
-	if r.Header.Get(FileNameHeader) == "" {
-		logging.Error("File name not set")
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-		return
-	}
-
+	/* Parsing form */
+	logging.Info("Parsing form")
 	r.Body = http.MaxBytesReader(w, r.Body, uploadLimit)
-
-	if mountPath == "" {
-		logging.Error("Mount path not set")
-		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+	err := r.ParseMultipartForm(uploadLimit)
+	if err != nil {
+		logging.Error("Failed to parse form", "error", err.Error())
+		http.Error(w, http.StatusText(http.StatusRequestEntityTooLarge), http.StatusRequestEntityTooLarge)
 		return
 	}
-	path := filepath.Join(mountPath, r.Header.Get(FileNameHeader))
+
+	/* Read form */
+	logging.Info("Reading form")
+
+	file, handler, err := r.FormFile("file")
+	if err != nil {
+		if errors.Is(err, http.ErrMissingFile) {
+			logging.Error("File not found")
+			http.Error(w, "File not found", http.StatusBadRequest)
+		} else {
+			logging.Error("Failed to retrieve file", "error", err.Error())
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		}
+		return
+	}
+	defer file.Close()
+
+	tags, ok := r.Form["tag"]
+	if !ok {
+		tags = make([]string, 0)
+	}
 
 	/* Add file to DB */
 	logging.Info("Adding file to DB")
 	var key uuid.UUID
 	var pgErr *pgconn.PgError
 	query := `
-	INSERT INTO files (file_path) VALUES ($1)
+	INSERT INTO files (file_path, tags) VALUES ($1, $2)
 	RETURNING key
 	`
-	if err := db.QueryRow(ctx, query, r.Header.Get(FileNameHeader)).Scan(&key); err != nil {
+	if err := db.QueryRow(ctx, query, handler.Filename, tags).Scan(&key); err != nil {
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 			logging.Error("File already exists")
 			http.Error(w, http.StatusText(http.StatusConflict), http.StatusConflict)
@@ -109,35 +122,38 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if mountPath == "" {
+		logging.Error("Mount path not set")
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	path := filepath.Join(mountPath, handler.Filename)
+
+	/* Write file */
 	logging.Info("Creating file", "path", path)
-	file, err := os.Create(path)
+	dst, err := os.Create(path)
 	if err != nil {
 		logging.Error("Failed to create file", "error", err.Error())
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
+	defer dst.Close()
 
-	reader := bufio.NewReader(r.Body)
-	writer := bufio.NewWriter(file)
-	var maxBytesError *http.MaxBytesError
-
+	buf := make([]byte, 32*1024)
 	logging.Info("Writing file")
 	for {
-		buf := make([]byte, 1024)
-		n, err := reader.Read(buf)
-		if errors.Is(err, io.EOF) {
-			break
-		} else if errors.As(err, &maxBytesError) {
-			logging.Error("File too large")
-			http.Error(w, http.StatusText(http.StatusRequestEntityTooLarge), http.StatusRequestEntityTooLarge)
-			return
-		} else if err != nil {
-			logging.Error("Failed to read request body", "error", err.Error())
+		bytesRead, err := file.Read(buf)
+		if err != nil && err != io.EOF {
+			logging.Error("Failed to read file", "error", err.Error())
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			return
 		}
 
-		if _, err := writer.Write(buf[:n]); err != nil {
+		if bytesRead == 0 {
+			break
+		}
+
+		if _, err := dst.Write(buf[:bytesRead]); err != nil {
 			logging.Error("Failed to write to file", "error", err.Error())
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			return
