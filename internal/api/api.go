@@ -187,7 +187,7 @@ func HandleListFiles(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Invalid limit value", http.StatusBadRequest)
 			return
 		}
-		if limit > 100 {
+		if limit > 1000 {
 			logging.Error("Limit too large")
 			http.Error(w, "Limit too large", http.StatusBadRequest)
 			return
