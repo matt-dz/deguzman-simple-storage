@@ -14,5 +14,8 @@ docker:
 	docker tag dss $(DOCKER_REGISTRY)/dss
 	docker push $(DOCKER_REGISTRY)/dss
 
+hash-all:
+	go run scripts/hash.go
+
 clean:
 	rm bin/*

@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
 	"dss/internal/database"
 	"dss/internal/logger"
 	"encoding/json"
@@ -98,6 +99,15 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
+	logging.Info("Hashing file")
+	hash, err := HashContents(file, sha256.New())
+	if err != nil {
+		logging.Error("Failed to hash file", "error", err.Error())
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	file.Seek(0, 0) // Reset file pointer
+
 	tags, ok := r.Form["tag"]
 	if !ok {
 		tags = make([]string, 0)
@@ -115,10 +125,10 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request) {
 	var key uuid.UUID
 	var pgErr *pgconn.PgError
 	query := `
-	INSERT INTO files (file_path, tags) VALUES ($1, $2)
+	INSERT INTO files (file_path, tags, hash) VALUES ($1, $2, $3)
 	RETURNING key
 	`
-	if err := db.QueryRow(ctx, query, filename, tags).Scan(&key); err != nil {
+	if err := db.QueryRow(ctx, query, filename, tags, hash).Scan(&key); err != nil {
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 			logging.Error("File already exists")
 			http.Error(w, http.StatusText(http.StatusConflict), http.StatusConflict)
