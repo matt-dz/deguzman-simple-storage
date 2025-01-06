@@ -103,6 +103,13 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request) {
 		tags = make([]string, 0)
 	}
 
+	title, err := generateRandomString(32)
+	if err != nil {
+		logging.Error("Failed to generate random string for filename", "error", err.Error())
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+	}
+	filename := fmt.Sprintf("%s%s", title, filepath.Ext(handler.Filename))
+
 	/* Add file to DB */
 	logging.Info("Adding file to DB")
 	var key uuid.UUID
@@ -111,7 +118,7 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request) {
 	INSERT INTO files (file_path, tags) VALUES ($1, $2)
 	RETURNING key
 	`
-	if err := db.QueryRow(ctx, query, handler.Filename, tags).Scan(&key); err != nil {
+	if err := db.QueryRow(ctx, query, filename, tags).Scan(&key); err != nil {
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 			logging.Error("File already exists")
 			http.Error(w, http.StatusText(http.StatusConflict), http.StatusConflict)
@@ -127,7 +134,7 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
-	path := filepath.Join(mountPath, handler.Filename)
+	path := filepath.Join(mountPath, filename)
 
 	/* Write file */
 	logging.Info("Creating file", "path", path)
