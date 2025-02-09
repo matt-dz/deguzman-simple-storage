@@ -26,6 +26,11 @@ func main() {
 		middleware.Authenticate(),
 	))
 
+	mux.HandleFunc("GET /heartbeat", middleware.Chain(
+		api.HandleHeartbeat,
+		middleware.Authenticate(),
+	))
+
 	logging.Info("Starting server on :80")
 	server := &http.Server{
 		Addr:    ":80",

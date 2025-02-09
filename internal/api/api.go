@@ -308,3 +308,25 @@ func HandleListFiles(w http.ResponseWriter, r *http.Request) {
 	}
 	logging.Info("Successfully encoded response")
 }
+
+func HandleHeartbeat(w http.ResponseWriter, r *http.Request) {
+	/* Verify mount path */
+	if _, err := os.Stat(mountPath); err != nil {
+		logging.Error("Mount path not found", "error", err.Error())
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+
+	/* Send heartbeat to DB */
+	logging.Info("Sending heartbeat to Postgres")
+	query := `
+	INSERT INTO heartbeats DEFAULT VALUES RETURNING id
+	`
+	var id int
+	if err := db.QueryRow(ctx, query).Scan(&id); err != nil {
+		logging.Error("Failed to send heartbeat", "error", err.Error())
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	logging.Info("Successfully sent heartbeat", "id", id)
+}
