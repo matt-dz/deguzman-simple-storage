@@ -34,5 +34,5 @@ EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TABLE heartbeats (
 		id SERIAL PRIMARY KEY,
-		created_at TIMESTAMPTZ NOT NULL default now(),
+		created_at TIMESTAMPTZ NOT NULL default now()
 );
