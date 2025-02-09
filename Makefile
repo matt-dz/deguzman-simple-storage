@@ -1,4 +1,4 @@
-.PHONY: all
+.PHONY: all build docker hash-all clean help
 
 include .env
 export
@@ -16,6 +16,9 @@ docker:
 
 hash-all:
 	go run scripts/hash.go
+
+help:
+	cat Makefile
 
 clean:
 	rm bin/*
